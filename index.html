@@ -1,0 +1,326 @@
+
+<!DOCTYPE html>
+<html lang="te">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>తేదీల వారీగా వడ్డీ లెక్కలు</title>
+
+<style>
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  padding: 20px;
+  background: #f4f0e6;
+  font-family: Arial, sans-serif;
+  color: #222;
+}
+
+.calculator {
+  max-width: 480px;
+  margin: 20px auto;
+  padding: 24px;
+  background: white;
+  border-radius: 16px;
+  border-top: 5px solid #287343;
+  box-shadow: 0 5px 22px #00000015;
+}
+
+h1 {
+  text-align: center;
+  color: #287343;
+  font-size: 24px;
+}
+
+.subtitle {
+  text-align: center;
+  color: #666;
+  margin-bottom: 24px;
+}
+
+label {
+  display: block;
+  font-weight: bold;
+  margin: 16px 0 7px;
+}
+
+input {
+  width: 100%;
+  padding: 13px;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  font-size: 16px;
+}
+
+button {
+  width: 100%;
+  padding: 14px;
+  margin-top: 20px;
+  border: 0;
+  border-radius: 8px;
+  background: #287343;
+  color: white;
+  font-size: 17px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+button:hover { background: #1c5933; }
+
+.reset {
+  background: #e5e7eb;
+  color: #222;
+  margin-top: 10px;
+}
+
+.results {
+  margin-top: 24px;
+  padding: 16px;
+  background: #f0f8f1;
+  border-radius: 10px;
+}
+
+.row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid #d7e6d9;
+}
+
+.row span { color: #444; }
+
+.row strong {
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.total {
+  color: #176533;
+  font-size: 18px;
+  border-bottom: none;
+}
+
+.hidden { display: none; }
+
+#error {
+  color: #c62828;
+  margin-top: 12px;
+}
+
+@media (max-width: 380px) {
+  .calculator { padding: 17px; }
+  h1 { font-size: 21px; }
+}
+</style>
+</head>
+
+<body>
+<div class="calculator">
+  <h1>గ్రామీణ వడ్డీ కాలిక్యులేటర్</h1>
+  <p class="subtitle">తేదీ నుంచి ఈరోజు వరకు వడ్డీ</p>
+
+  <form id="form">
+    <label for="principal">అసలు మొత్తం (₹)</label>
+    <input id="principal" type="number" min="1"
+      step="any" placeholder="ఉదా: 100000" required>
+
+    <label for="rate">₹100 కి నెల వడ్డీ (₹)</label>
+    <input id="rate" type="number" min="0"
+      step="any" value="2" required>
+
+    <label for="startDate">అప్పు తీసుకున్న తేదీ</label>
+    <input id="startDate" type="date" required>
+
+    <label for="endDate">వడ్డీ లెక్కించే చివరి తేదీ</label>
+    <input id="endDate" type="date" required>
+
+    <button type="submit">వడ్డీ లెక్కించు</button>
+    <button type="button" class="reset" id="reset">Reset</button>
+  </form>
+
+  <p id="error" role="alert"></p>
+
+  <div id="results" class="results hidden" aria-live="polite">
+    <div class="row">
+      <span>అసలు మొత్తం</span>
+      <strong id="pResult"></strong>
+    </div>
+    <div class="row">
+      <span>మొత్తం రోజులు</span>
+      <strong id="daysResult"></strong>
+    </div>
+    <div class="row">
+      <span>పూర్తి నెలలు</span>
+      <strong id="monthsResult"></strong>
+    </div>
+    <div class="row">
+      <span>మిగిలిన రోజులు</span>
+      <strong id="remainingResult"></strong>
+    </div>
+    <div class="row">
+      <span>నెల వడ్డీ</span>
+      <strong id="monthlyResult"></strong>
+    </div>
+    <div class="row">
+      <span>మొత్తం వడ్డీ</span>
+      <strong id="interestResult"></strong>
+    </div>
+    <div class="row total">
+      <span>అసలు + వడ్డీ</span>
+      <strong id="totalResult"></strong>
+    </div>
+  </div>
+</div>
+
+<script>
+const form = document.getElementById("form");
+const results = document.getElementById("results");
+const error = document.getElementById("error");
+
+function money(value) {
+  return value.toLocaleString("en-IN", {
+    style: "currency",
+    currency: "INR",
+    maximumFractionDigits: 2
+  });
+}
+
+function parseDate(value) {
+  const [year, month, day] = value.split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, day));
+}
+
+// ఈరోజు తేదీని స్థానిక క్యాలెండర్ ప్రకారం సెట్ చేయడం
+function localToday() {
+  const now = new Date();
+  return [
+    now.getFullYear(),
+    String(now.getMonth() + 1).padStart(2, "0"),
+    String(now.getDate()).padStart(2, "0")
+  ].join("-");
+}
+
+document.getElementById("endDate").value = localToday();
+
+form.addEventListener("submit", function(event) {
+  event.preventDefault();
+  error.textContent = "";
+  results.classList.add("hidden");
+
+  const principal = Number(
+    document.getElementById("principal").value
+  );
+  const rate = Number(document.getElementById("rate").value);
+  const startValue = document.getElementById("startDate").value;
+  const endValue = document.getElementById("endDate").value;
+
+  if (
+    !Number.isFinite(principal) ||
+    !Number.isFinite(rate) ||
+    principal <= 0 ||
+    rate < 0 ||
+    !startValue ||
+    !endValue
+  ) {
+    error.textContent = "దయచేసి సరైన వివరాలు నమోదు చేయండి.";
+    return;
+  }
+
+  const start = parseDate(startValue);
+  const end = parseDate(endValue);
+
+  if (end < start) {
+    error.textContent = "చివరి తేదీ, మొదటి తేదీ కంటే ముందు ఉండకూడదు.";
+    return;
+  }
+
+  const days = Math.round((end - start) / 86400000);
+
+  // తేదీల మధ్య పూర్తి క్యాలెండర్ నెలలు లెక్కించడం
+  let months =
+    (end.getUTCFullYear() - start.getUTCFullYear()) * 12 +
+    end.getUTCMonth() - start.getUTCMonth();
+
+  let anniversaryDay = Math.min(
+    start.getUTCDate(),
+    new Date(Date.UTC(
+      start.getUTCFullYear(),
+      start.getUTCMonth() + months + 1,
+      0
+    )).getUTCDate()
+  );
+
+  let monthDate = new Date(Date.UTC(
+    start.getUTCFullYear(),
+    start.getUTCMonth() + months,
+    Math.min(
+      start.getUTCDate(),
+      new Date(Date.UTC(
+        start.getUTCFullYear(),
+        start.getUTCMonth() + months + 1,
+        0
+      )).getUTCDate()
+    )
+  ));
+
+  if (monthDate > end) months--;
+
+  const completedDate = new Date(Date.UTC(
+    start.getUTCFullYear(),
+    start.getUTCMonth() + months,
+    Math.min(
+      start.getUTCDate(),
+      new Date(Date.UTC(
+        start.getUTCFullYear(),
+        start.getUTCMonth() + months + 1,
+        0
+      )).getUTCDate()
+    )
+  ));
+
+  const remainingDays = Math.round(
+    (end - completedDate) / 86400000
+  );
+
+  // నెల వడ్డీ = అసలు / 100 × రేటు
+  const monthlyInterest = (principal / 100) * rate;
+
+  // గ్రామీణ సాధారణ లెక్క:
+  // పూర్తి నెలలకు నెల వడ్డీ, మిగిలిన రోజులకు 30 రోజుల ఆధారంగా
+  const totalInterest = monthlyInterest *
+    (months + remainingDays / 30);
+
+  const totalAmount = principal + totalInterest;
+
+  if (!Number.isFinite(totalAmount)) {
+    error.textContent = "లెక్కించిన మొత్తం చాలా పెద్దది.";
+    return;
+  }
+
+  document.getElementById("pResult").textContent = money(principal);
+  document.getElementById("daysResult").textContent = days + " రోజులు";
+  document.getElementById("monthsResult").textContent = months + " నెలలు";
+  document.getElementById("remainingResult").textContent =
+    remainingDays + " రోజులు";
+  document.getElementById("monthlyResult").textContent =
+    money(monthlyInterest);
+  document.getElementById("interestResult").textContent =
+    money(totalInterest);
+  document.getElementById("totalResult").textContent =
+    money(totalAmount);
+
+  results.classList.remove("hidden");
+});
+
+document.getElementById("reset").addEventListener("click", function() {
+  form.reset();
+  document.getElementById("endDate").value = localToday();
+  document.getElementById("rate").value = 2;
+  results.classList.add("hidden");
+  error.textContent = "";
+});
+</script>
+</body>
+</html>
